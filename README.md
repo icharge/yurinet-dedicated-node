@@ -1,6 +1,6 @@
 # yurinet-dedicated-node
-## YuriNET Dedicated Server with NodeJS
---------------------------------------
+YuriNET Dedicated Server with NodeJS
+
 **Install**
 > npm install
 
