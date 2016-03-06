@@ -1,0 +1,16 @@
+{
+  "name": "yurinet-dedicated-node",
+  "version": "0.1.0",
+  "description": "YuriNET Dedicated Server with NodeJS",
+  "main": "main.js",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "YuriNET",
+    "Dedicated",
+    "Server"
+  ],
+  "author": "iCharge",
+  "license": "ISC"
+}
