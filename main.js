@@ -1,9 +1,20 @@
+// TODO: Use IP:Port as key for array instead ID
+// And store ID to another List.
+
 'use strict';
 
 require('lazy.js');
 const dgram = require('dgram');
 const server = dgram.createSocket('udp4');
+const readline = require('readline');
+const rl = readline.createInterface(process.stdin, process.stdout);
 
+console.log('YuriNET Dedicated Server v1 - NODEJS');
+console.log('====================================');
+console.log();
+console.log('Initializing server...');
+
+// Add listener events.
 server.on('error', (err) => {
   console.log(`server error:\n${err.stack}`);
   server.close();
@@ -11,7 +22,40 @@ server.on('error', (err) => {
 
 server.on('listening', () => {
   var address = server.address();
-  console.log(`server listening ${address.address}:${address.port}`);
+  console.log(`Server started. And listening ${address.address}:${address.port}...`);
+
+  // Show prompt.
+  rl.setPrompt('> ');
+  rl.prompt();
+});
+
+// Input
+rl.on('line', (line) => {
+  line = line.trim();
+  if (line != '') {
+    let args = line.split(' ');
+
+    switch(args[0].trim()) {
+      case 'hi':
+        console.log('Hello !!');
+        break;
+
+      case 'count':
+      case 'online':
+      case 'useronline':
+        console.log(`There are ${clientCount()} online.`);
+        break;
+
+      default:
+        console.log(`What do you mean '${line}' ?`);
+
+    }
+  }
+
+  rl.prompt();
+}).on('close', () => {
+  console.log('Goodbye ..');
+  process.exit(0);
 });
 
 // Enum Command.
@@ -35,6 +79,24 @@ const Game = {
   YR: 2
 };
 
+// Initialize global variables.
+const startedAt = new Date();
+
+var processCount = 0;
+var peekClient = 0;
+var clients = {};
+var Config = {};
+Config.port = 9000;
+Config.timeout = 10;
+Config.maxClients = 100;
+
+// Argument parsing...
+Config.port = Number(process.argv[2]) || Config.port;
+
+console.log(': Server options :');
+console.log(JSON.stringify(Config, null, 2));
+console.log();
+
 // Client Class.
 var Client = function() {
   this.id = 0;
@@ -49,14 +111,6 @@ var Client = function() {
   return this;
 };
 
-// Initialize.
-var processCount = 0;
-var port = 9000;
-var startedAt = new Date();
-var timeout = 10;
-var maxClients = 100;
-var peekClient = 0;
-var clients = {};
 var clientCount = function () {
   let count = 0;
   for (let i in clients) {
@@ -66,10 +120,8 @@ var clientCount = function () {
   return count;
 };
 
-// Argument parsing...
-port = process.argv[2] | port;
-
-for (var i = 0; i < maxClients; i++) {
+// Initiate client array list.
+for (var i = 0; i < Config.maxClients; i++) {
   clients[i] = null;
   //clients.push(null);
 }
@@ -118,9 +170,9 @@ server.on('message', (data, rinfo) => {
       let jsonReturn = new Buffer(JSON.stringify({
         serverstate: 'online',
         servername: 'NODEJS',
-        serverport: port,
+        serverport: Config.port,
         launchedon: startedAt,
-        maxclients: maxClients,
+        maxclients: Config.maxClients,
         peekclients: peekClient,
         clientcount: clientCount(),
         clients: {} // TODO: get clients list.
@@ -160,7 +212,7 @@ server.on('message', (data, rinfo) => {
   }
 
   // Is full of clients?
-  if (clientCount() >= maxClients) {
+  if (clientCount() >= Config.maxClients) {
     console.log(`#${procId}] Server is full !.`);
     console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
     return;
@@ -278,7 +330,7 @@ var timeoutKicker = function () {
 };
 
 var timeoutKickerPromise = setInterval(timeoutKicker, 1000);
-console.log(`Started timeoutKicker : ${timeoutKickerPromise}`);
+console.log(`Started timeoutKicker.`);
 
 // Open server port.
-server.bind(port);
+server.bind(Config.port);
