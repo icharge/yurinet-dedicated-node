@@ -43,7 +43,7 @@ rl.on('line', (line) => {
       case 'count':
       case 'online':
       case 'useronline':
-        console.log(`There are ${clientCount()} online.`);
+        console.log(`There are ${clientCount} online.`);
         break;
 
       default:
@@ -79,12 +79,28 @@ const Game = {
   YR: 2
 };
 
-// Initialize global variables.
+/**
+ * Initialize global variables.
+ */
+// Defined started date time.
 const startedAt = new Date();
 
+// Count only.
 var processCount = 0;
+
+// Max client number.
 var peekClient = 0;
+
+// Clients collection.
 var clients = {};
+
+// Clients collection by IP:Port as key.
+var clientsIpList = {};
+
+// Client count.
+var clientCount = 0;
+
+// Configuration object.
 var Config = {};
 Config.port = 9000;
 Config.timeout = 10;
@@ -99,7 +115,7 @@ console.log();
 
 // Client Class.
 var Client = function() {
-  this.id = 0;
+  this.id = -1;
   this.connection = {
     address: '0.0.0.0',
     port: 0
@@ -111,7 +127,8 @@ var Client = function() {
   return this;
 };
 
-var clientCount = function () {
+// Count clients on list.
+var getClientCount = function () {
   let count = 0;
   for (let i in clients) {
     if (clients[i] != null)
@@ -119,6 +136,64 @@ var clientCount = function () {
   }
   return count;
 };
+
+var ClientSeeker = (function (clientList, clientListIp, max) {
+  let index = 0;
+  let seeker = {};
+
+  seeker.findFreeSlot = function () {
+    let client = -1;
+    for (let c = 0; c < max; index++, c++) {
+      if (index > max) {
+        index = 0;
+      }
+
+      if (null == clients[index]) {
+         client = index;
+         break;
+      }
+    }
+    return client;
+  };
+
+  seeker.addClient = function (client) {
+    if (null != client) {
+      let addr = client.connection.address + ':' + client.connection.port;
+      clientList[client.id] = client;
+      clientListIp[addr] = client;
+      clientCount++;
+
+      console.log(`Added client #${client.id} from ${addr}`);
+    }
+  };
+
+  seeker.removeClient = function (id) {
+    let client = clientList[id];
+    if (null != client) {
+      let addr = client.connection.address + ':' + client.connection.port;
+      clientList[id] = null;
+      delete clientListIp[addr];
+
+      console.log(`Removed client #${id} from ${addr}`);
+    }
+  }
+
+  seeker.removeClientByIp = function (ip, port) {
+    let addr = ip + ':' + port;
+    let client = clientListIp[addr];
+    if (null != client) {
+      clientlist[client.id] = null;
+      delete clientListIp[addr];
+      clientCount--;
+
+      console.log(`Removed client #${client.id} by IP:Port ${addr}`);
+    }
+
+    client = null;
+  }
+
+  return seeker;
+})(clients, clientsIpList, Config.maxClients);
 
 // Initiate client array list.
 for (var i = 0; i < Config.maxClients; i++) {
@@ -174,26 +249,20 @@ server.on('message', (data, rinfo) => {
         launchedon: startedAt,
         maxclients: Config.maxClients,
         peekclients: peekClient,
-        clientcount: clientCount(),
+        clientcount: clientCount,
         clients: {} // TODO: get clients list.
       }));
       server.send(jsonReturn, 0, jsonReturn.length, rinfo.port, rinfo.address);
+
+      // No need to store this client action.
+      return;
     } else if (ctlByte == ctlType.CTL_RESET) {
       console.log(`#${procId}] > CTL_RESET`);
 
     } else if (ctlByte == ctlType.CTL_DISCONNECT) {
       console.log(`#${procId}] > CTL_DISCONNECT`);
 
-      for (let i in clients) {
-        if (null == clients[i])
-          continue;
-
-        let cConn = clients[i].connection;
-        if (cConn.address + cConn.port == rinfo.address + rinfo.port) {
-          clients[i] = null;
-          break;
-        }
-      }
+      ClientSeeker.removeClientByIp(rinfo.address, rinfo.port)
       return;
     } else if (ctlByte == ctlType.CTL_PROXY) {
       console.log(' > CTL_PROXY');
@@ -212,23 +281,14 @@ server.on('message', (data, rinfo) => {
   }
 
   // Is full of clients?
-  if (clientCount() >= Config.maxClients) {
+  if (clientCount >= Config.maxClients) {
     console.log(`#${procId}] Server is full !.`);
     console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
     return;
   }
 
   // Find client Obj by Endpoint.
-  let client = function () {
-    for (let i in clients) {
-      if (null == clients[i])
-        continue;
-
-      let cConn = clients[i].connection;
-      if (cConn.address + cConn.port == rinfo.address + rinfo.port)
-        return clients[i];
-    }
-  }();
+  let client = clientsIpList[rinfo.address + ':' + rinfo.port];
 
   //console.log('client : ' + client);
 
@@ -237,25 +297,27 @@ server.on('message', (data, rinfo) => {
     client.timestamp = new Date();
     //console.log(`#${procId}] Found client.`);
   } else {
-    let emptySlot = function () {
-      for (let i in clients) {
-        if (!clients[i]) {
-          return i;
-        }
-      }
+    let emptySlot = ClientSeeker.findFreeSlot();
+    console.log(`Got empty slot : ${emptySlot}`);
 
-      return null;
-    }();
+    if (emptySlot > -1) {
+      // new client.
+      client = new Client();
+      client.connection = rinfo;
+      client.id = emptySlot;
+      client.timestamp = new Date();
 
-    // new client.
-    client = new Client();
-    client.connection = rinfo;
-    client.id = emptySlot;
-    client.timestamp = new Date();
+      // Add client to list.
+      //clients[emptySlot] = client;
+      //clientsIpList[rinfo.address + ':' + rinfo.port] = client;
+      //clientCount++;
+      ClientSeeker.addClient(client);
 
-    clients[emptySlot] = client;
-    console.log(`#${procId}] Inserted new client as ${emptySlot}`);
-    console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
+      //console.log(`#${procId}] Inserted new client as #${emptySlot}`);
+      //console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
+    } else {
+      console.log(`Server full !!`);
+    }
 
     return;
   }
@@ -264,12 +326,12 @@ server.on('message', (data, rinfo) => {
     // Set id to first byte.
     data[0] = client.id;
 
-    for (let i in clients) {
-      if (null == clients[i])
+    for (let i in clientsIpList) {
+      if (null == clientsIpList[i])
         continue;
 
-      if (clients[i].id != client.id) {
-        let clientConn = clients[i].connection;
+      if (clientsIpList[i].id != client.id) {
+        let clientConn = clientsIpList[i].connection;
         //console.log(`#${procId}] Broadcast by ${client.id} to ${i}`);
         server.send(data, 0, data.length, clientConn.port, clientConn.address);
       }
@@ -284,19 +346,10 @@ server.on('message', (data, rinfo) => {
     data[0] = client.id;
 
     //console.log(`#${procId}] Sending from ${client.id} to ${idToSend}.`);
-    let clientToSend = function () {
-      for (let i in clients) {
-        if (null == clients[i])
-          continue;
-
-        if (clients[i].id == idToSend) {
-          return clients[i];
-        }
-      }
-    }();
+    let clientToSend = clients[idToSend];
 
     //console.log(`#${procId}] clientToSend : ` + JSON.stringify(clientToSend));
-    if (clientToSend) {
+    if (!!clientToSend) {
       //console.log(`#${procId}] Sending...`);
       server.send(data, 0, data.length, clientToSend.connection.port,
         clientToSend.connection.address);
@@ -310,21 +363,23 @@ server.on('message', (data, rinfo) => {
 var timeoutKicker = function () {
   processCount = 0;
 
-  if (clientCount() > peekClient) {
-    peekClient = clientCount();
+  clientCount = getClientCount();
+  if (clientCount > peekClient) {
+    peekClient = clientCount
   }
 
   let nowDate = new Date();
-  for(let i in clients) {
-    if (null == clients[i]) {
+  for(let i in clientsIpList) {
+    if (null == clientsIpList[i]) {
       continue;
     }
 
-    let diff = Math.round((nowDate - clients[i].timestamp) / 1000);
+    let diff = Math.round((nowDate - clientsIpList[i].timestamp) / 1000);
     //console.log('Diff ' + diff);
-    if (diff > timeout) {
-      clients[i] = null;
-      console.log('Kicked client #' + i);
+    if (diff > Config.timeout) {
+      let clientId = clientsIpList[i].id;
+      ClientSeeker.removeClient(clientId);
+      console.log('Kicked client #' + clientId);
     }
   }
 };
