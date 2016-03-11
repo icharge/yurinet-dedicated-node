@@ -1,6 +1,3 @@
-// TODO: Use IP:Port as key for array instead ID
-// And store ID to another List.
-
 'use strict';
 
 require('lazy.js');
