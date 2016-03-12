@@ -1,9 +1,12 @@
 'use strict';
 
+process.stdout.write("\x1Bc"); // Clear screen buffer.
+
 require('lazy.js');
 const dgram = require('dgram');
 const server = dgram.createSocket('udp4');
 const readline = require('readline');
+const util = require('util')
 const rl = readline.createInterface(process.stdin, process.stdout);
 
 console.log('YuriNET Dedicated Server v1 - NODEJS');
@@ -20,11 +23,30 @@ server.on('error', (err) => {
 server.on('listening', () => {
   var address = server.address();
   console.log(`Server started. And listening ${address.address}:${address.port}...`);
-
-  // Show prompt.
-  rl.setPrompt('> ');
-  rl.prompt();
 });
+
+// Override print log function.
+var fu = function(type, args) {
+  var t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
+  var text = util.format.apply(console, args);
+  rl.output.write("\n\x1B[" + t + "A\x1B[0J");
+  rl.output.write(text + "\n");
+  rl.output.write(Array(t).join("\n\x1B[E"));
+  rl._refreshLine();
+};
+
+console.log = function() {
+    fu("log", arguments);
+};
+console.warn = function() {
+    fu("warn", arguments);
+};
+console.info = function() {
+    fu("info", arguments);
+};
+console.error = function() {
+    fu("error", arguments);
+};
 
 // Input
 rl.on('line', (line) => {
@@ -53,7 +75,30 @@ rl.on('line', (line) => {
 }).on('close', () => {
   console.log('Goodbye ..');
   process.exit(0);
+}).on('SIGINT', () => {
+  rl.question('\n You pressed ^C ! '
+    + '\n Choose your choice : '
+    + '\n [1] Stop server immediately.'
+    + '\n [2] Stop server when all players are leaved.'
+    + '\n > ', (ans) => {
+    if (ans.trim() == '1') {
+      rl.close();
+    } else if (ans.trim() == '2') {
+      console.log('Server stopped when all players are leaved.');
+      isWaitStop = true;
+    } else {
+      console.log('Cancelled');
+    }
+
+    rl.prompt();
+  });
 });
+
+// Show prompt.
+rl.setPrompt('> ');
+rl.prompt();
+
+
 
 // Enum Command.
 const cmdType = {
@@ -96,6 +141,9 @@ var clientsIpList = {};
 
 // Client count.
 var clientCount = 0;
+
+// Stop server when all player leaved.
+var isWaitStop = false;
 
 // Configuration object.
 var Config = {};
@@ -360,7 +408,6 @@ server.on('message', (data, rinfo) => {
 var timeoutKicker = function () {
   processCount = 0;
 
-  clientCount = getClientCount();
   if (clientCount > peekClient) {
     peekClient = clientCount
   }
@@ -377,6 +424,14 @@ var timeoutKicker = function () {
       let clientId = clientsIpList[i].id;
       ClientSeeker.removeClient(clientId);
       console.log('Kicked client #' + clientId);
+    }
+  }
+  clientCount = getClientCount();
+
+  if (isWaitStop) {
+    if (clientCount <= 0) {
+      console.log('All player leaved. Stop server on ' + new Date());
+      rl.close();
     }
   }
 };
