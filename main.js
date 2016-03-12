@@ -179,7 +179,7 @@ var ClientSeeker = (function (clientList, clientListIp, max) {
     let addr = ip + ':' + port;
     let client = clientListIp[addr];
     if (null != client) {
-      clientlist[client.id] = null;
+      clientList[client.id] = null;
       delete clientListIp[addr];
       clientCount--;
 
