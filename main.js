@@ -9,6 +9,35 @@ const readline = require('readline');
 const util = require('util')
 const rl = readline.createInterface(process.stdin, process.stdout);
 
+// Override print log function.
+var fu = function(type, args) {
+  let text = util.format.apply(console, args);
+  try {
+    let t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
+    rl.output.write("\n\x1B[" + t + "A\x1B[0J");
+    rl.output.write(text + "\n");
+    rl.output.write(Array(t).join("\n\x1B[E"));
+    rl._refreshLine();
+  } catch(e) {
+    fu.log(text);
+  }
+};
+
+fu.log = console.log;
+
+console.log = function() {
+    fu("log", arguments);
+};
+console.warn = function() {
+    fu("warn", arguments);
+};
+console.info = function() {
+    fu("info", arguments);
+};
+console.error = function() {
+    fu("error", arguments);
+};
+
 console.log('YuriNET Dedicated Server v1 - NODEJS');
 console.log('====================================');
 console.log();
@@ -23,30 +52,11 @@ server.on('error', (err) => {
 server.on('listening', () => {
   var address = server.address();
   console.log(`Server started. And listening ${address.address}:${address.port}...`);
+
+  // Show prompt.
+  rl.setPrompt('> ');
+  rl.prompt();
 });
-
-// Override print log function.
-var fu = function(type, args) {
-  var t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
-  var text = util.format.apply(console, args);
-  rl.output.write("\n\x1B[" + t + "A\x1B[0J");
-  rl.output.write(text + "\n");
-  rl.output.write(Array(t).join("\n\x1B[E"));
-  rl._refreshLine();
-};
-
-console.log = function() {
-    fu("log", arguments);
-};
-console.warn = function() {
-    fu("warn", arguments);
-};
-console.info = function() {
-    fu("info", arguments);
-};
-console.error = function() {
-    fu("error", arguments);
-};
 
 // Input
 rl.on('line', (line) => {
@@ -62,6 +72,9 @@ rl.on('line', (line) => {
       case 'count':
       case 'online':
       case 'useronline':
+        if (args[1] == 'detail') {
+          console.log(`All clients detail here : \n${JSON.stringify(clients, null, 2)}`);
+        }
         console.log(`There are ${clientCount} online.`);
         break;
 
@@ -75,7 +88,8 @@ rl.on('line', (line) => {
 }).on('close', () => {
   console.log('Goodbye ..');
   process.exit(0);
-}).on('SIGINT', () => {
+});
+rl.on('SIGINT', () => {
   rl.question('\n You pressed ^C ! '
     + '\n Choose your choice : '
     + '\n [1] Stop server immediately.'
@@ -93,12 +107,6 @@ rl.on('line', (line) => {
     rl.prompt();
   });
 });
-
-// Show prompt.
-rl.setPrompt('> ');
-rl.prompt();
-
-
 
 // Enum Command.
 const cmdType = {
