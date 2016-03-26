@@ -108,12 +108,17 @@ rl.on('SIGINT', () => {
   });
 });
 
-// Enum Command.
+/**
+ * Type of command in first byte.
+ */
 const cmdType = {
   CMD_CONTROL: 0xFE,
   CMD_BROADCAST: 0xFF
 };
 
+/**
+ * Type of control in second byte.
+ */
 const ctlType = {
   CTL_PING: 0x0,
   CTL_QUERY: 0x1,
@@ -123,10 +128,13 @@ const ctlType = {
   CTL_PROXY_DISCONNECT: 0x5
 };
 
+/**
+ * Type of game.
+ */
 const Game = {
-  NON: 0,
-  RA2: 1,
-  YR: 2
+  NON: 'N/A',
+  RA2: 'RA2',
+  YR: 'YR'
 };
 
 /**
@@ -166,21 +174,28 @@ console.log(': Server options :');
 console.log(JSON.stringify(Config, null, 2));
 console.log();
 
-// Client Class.
-var Client = function() {
-  this.id = -1;
-  this.connection = {
+/**
+ * Class of client.
+ */
+var Client = function () { /*.. */ };
+Client.prototype = function () {
+  let proto = {};
+  proto.id = -1;
+  proto.connection = {
     address: '0.0.0.0',
     port: 0
   };
-  this.name = '';
-  this.timestamp = new Date();
-  this.game = Game.NON;
+  proto.name = '';
+  proto.timestamp = new Date();
+  proto.game = Game.NON;
 
-  return this;
-};
+  return proto;
+}();
 
-// Count clients on list.
+/**
+ * Count clients on list.
+ * @return {Number} Number of clients.
+ */
 var getClientCount = function () {
   let count = 0;
   for (let i in clients) {
@@ -190,6 +205,9 @@ var getClientCount = function () {
   return count;
 };
 
+/**
+ * Client seeker class.
+ */
 var ClientSeeker = (function (clientList, clientListIp, max) {
   let index = 0;
   let seeker = {};
@@ -295,7 +313,7 @@ server.on('message', (data, rinfo) => {
       console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
       // TODO: Response info as Json.
 
-      let jsonReturn = new Buffer(JSON.stringify({
+      let strReturn = JSON.stringify({
         serverstate: 'online',
         servername: 'NODEJS',
         serverport: Config.port,
@@ -303,8 +321,26 @@ server.on('message', (data, rinfo) => {
         maxclients: Config.maxClients,
         peekclients: peekClient,
         clientcount: clientCount,
-        clients: {} // TODO: get clients list.
-      }));
+        clients: (function () {
+          let clientsArr = [];
+          for(let key in clientsIpList) {
+            let c = clientsIpList[key];
+            let client = {
+              name: c.name,
+              game: c.game,
+              timestamp: c.timestamp
+            };
+
+            clientsArr.push(client);
+          }
+
+          return clientsArr;
+        })()
+      });
+
+      //console.log(strReturn);
+
+      let jsonReturn = new Buffer(strReturn);
       server.send(jsonReturn, 0, jsonReturn.length, rinfo.port, rinfo.address);
 
       // No need to store this client action.
@@ -390,8 +426,68 @@ server.on('message', (data, rinfo) => {
       }
     }
 
-    // TODO: Get player name from packet.
-    // TODO: Get game from packet.
+    // Set name & game to current client
+    if (client != null) {
+      // Make Async.
+      setTimeout(function (client, data) {
+
+        // Check if have no name.
+        if (client.name == "" || client.name == null) {
+          try {
+            console.log('Resolving name...');
+
+            let clientName = '',
+                clientNameArr = [];
+
+            // SubArray name from data.
+            clientNameArr = function (obj) {
+              let byteArr = [];
+              for(let i = 25; i < 42; i++) {
+                byteArr.push(obj[i]);
+              }
+
+              return byteArr;
+            }(data);
+
+            // Map char data.
+            clientNameArr.map(function (value, index) {
+              // Not need \0 terminated string.
+              if (value == 0) {
+                delete clientNameArr[index];
+                return;
+              }
+
+              // Change byte to Char.
+              clientNameArr[index] = String.fromCharCode(value);
+            });
+
+            // Join char to String.
+            clientName = clientNameArr.join('').trim();
+
+            client.name = clientName;
+
+            console.log('Resolved name is ' + clientName);
+          } catch (ex) {
+            console.error("Can't get name from bytes !");
+            console.error(ex);
+          }
+        }
+
+        if (client.game == Game.NON) {
+          let clientGame = Game.NON;
+
+          if (data[19] == 3) {
+            clientGame = Game.RA2;
+          } else if (data[19] == 4) {
+            clientGame = Game.YR;
+          }
+
+          client.game = clientGame;
+        }
+      }, 1, client, data);
+
+    }
+    // END of Getting name.---------------------------------------------------------
 
   } else if (cmdByte != client.id) {
     // Send to specified ID.
@@ -413,6 +509,9 @@ server.on('message', (data, rinfo) => {
 
 //console.log('clients:', JSON.stringify(clients));
 
+/**
+ * Timeout Kicker.
+ */
 var timeoutKicker = function () {
   processCount = 0;
 
