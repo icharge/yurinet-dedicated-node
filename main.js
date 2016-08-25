@@ -9,8 +9,12 @@ const readline = require('readline');
 const util = require('util')
 const rl = readline.createInterface(process.stdin, process.stdout);
 
+// Import WebServer
+const express = require('express');
+const wapp = express();
+
 // Override print log function.
-var fu = function(type, args) {
+var fu = function (type, args) {
   let text = util.format.apply(console, args);
   try {
     let t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
@@ -18,24 +22,24 @@ var fu = function(type, args) {
     rl.output.write(text + "\n");
     rl.output.write(Array(t).join("\n\x1B[E"));
     rl._refreshLine();
-  } catch(e) {
+  } catch (e) {
     fu.log(text);
   }
 };
 
 fu.log = console.log;
 
-console.log = function() {
-    fu("log", arguments);
+console.log = function () {
+  fu("log", arguments);
 };
-console.warn = function() {
-    fu("warn", arguments);
+console.warn = function () {
+  fu("warn", arguments);
 };
-console.info = function() {
-    fu("info", arguments);
+console.info = function () {
+  fu("info", arguments);
 };
-console.error = function() {
-    fu("error", arguments);
+console.error = function () {
+  fu("error", arguments);
 };
 
 console.log('YuriNET Dedicated Server v1 - NODEJS');
@@ -58,13 +62,52 @@ server.on('listening', () => {
   rl.prompt();
 });
 
+// Initialize Express
+wapp.get('/', (req, res) => {
+  res.send('YuriNET Hello !');
+});
+
+wapp.get('/info', (req, res) => {
+  let strReturn = JSON.stringify({
+    serverstate: 'online',
+    servername: 'NODEJS',
+    serverport: Config.port,
+    launchedon: startedAt,
+    maxclients: Config.maxClients,
+    peekclients: peekClient,
+    clientcount: clientCount,
+    clients: (function () {
+      let clientsArr = [];
+      for (let key in clientsIpList) {
+        let c = clientsIpList[key];
+        let client = {
+          name: c.name,
+          game: c.game,
+          timestamp: c.timestamp
+        };
+
+        clientsArr.push(client);
+      }
+
+      return clientsArr;
+    })()
+  });
+  res.send(strReturn);
+});
+
+// Bind Web Application
+wapp.listen(4480, () => {
+  console.log('Web application listening on port 4480');
+});
+
+
 // Input
 rl.on('line', (line) => {
   line = line.trim();
   if (line != '') {
     let args = line.split(' ');
 
-    switch(args[0].trim()) {
+    switch (args[0].trim()) {
       case 'hi':
         console.log('Hello !!');
         break;
@@ -95,17 +138,17 @@ rl.on('SIGINT', () => {
     + '\n [1] Stop server immediately.'
     + '\n [2] Stop server when all players are leaved.'
     + '\n > ', (ans) => {
-    if (ans.trim() == '1') {
-      rl.close();
-    } else if (ans.trim() == '2') {
-      console.log('Server stopped when all players are leaved.');
-      isWaitStop = true;
-    } else {
-      console.log('Cancelled');
-    }
+      if (ans.trim() == '1') {
+        rl.close();
+      } else if (ans.trim() == '2') {
+        console.log('Server stopped when all players are leaved.');
+        isWaitStop = true;
+      } else {
+        console.log('Cancelled');
+      }
 
-    rl.prompt();
-  });
+      rl.prompt();
+    });
 });
 
 /**
@@ -135,6 +178,67 @@ const Game = {
   NON: 'N/A',
   RA2: 'RA2',
   YR: 'YR'
+};
+
+/**
+ * Payload for send message in Lobby.
+ *
+ * Name:    index 25 to 25 + 16.
+ * Message: index 69 to 475. (with 0x00 seperated)
+ */
+const MSG_PAYLOAD = [255, 5, 198, 161, 61, 54, 18, 0, 0, 42, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 3, 170, 12, 0, 0, 0,
+  /* name. */
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+/**
+ * Clone Array.
+ */
+Array.clone = function (oldArr) {
+  let newArr = new Array(oldArr.length),
+    i = oldArr.length;
+  while (i--) {
+    newArr[i] = oldArr[i];
+  }
+
+  return newArr;
+};
+
+var genSendMsgBytes = function (name, message) {
+  let sendBytes = new ArrayBuffer(473);
+  // Clone payload header first.
+  //sendBytes = Array.clone(MSG_PAYLOAD);
+  for (let i in MSG_PAYLOAD) {
+    sendBytes[i] = MSG_PAYLOAD[i];
+  }
+
+  // Push name to bytes array.
+  // Don't let name length greater than 16.
+  let nameLen = name.length < 17 ? name.length : 16;
+  for (let i = 0; i < nameLen; i++) {
+    sendBytes[i + 25] = name.charCodeAt(i);
+  }
+
+  // Push message to bytes array.
+  // Message length must less than 203.
+  let messageLen = (message.length < 204 ? message.length : 203);
+  let skip = false;
+
+  console.log('messageLen : ' + messageLen);
+
+  for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
+    if (!skip) {
+      sendBytes[i] = message.charCodeAt(charIndex++);
+      console.log(i + ' ' + sendBytes[i])
+    } else {
+      sendBytes[i] = 0;
+    }
+    skip = !skip;
+  }
+
+  return sendBytes;
 };
 
 /**
@@ -190,7 +294,7 @@ Client.prototype = function () {
   proto.game = Game.NON;
 
   return proto;
-}();
+} ();
 
 /**
  * Count clients on list.
@@ -214,14 +318,14 @@ var ClientSeeker = (function (clientList, clientListIp, max) {
 
   seeker.findFreeSlot = function () {
     let client = -1;
-    for (let c = 0; c < max; index++, c++) {
+    for (let c = 0; c < max; index++ , c++) {
       if (index > max) {
         index = 0;
       }
 
       if (null == clients[index]) {
-         client = index;
-         break;
+        client = index;
+        break;
       }
     }
     return client;
@@ -286,7 +390,7 @@ server.on('message', (data, rinfo) => {
 
   // Initial command bytes.
   let cmdByte = null,
-      ctlByte = null;
+    ctlByte = null;
 
   // Get command byte.
   cmdByte = data[0];
@@ -311,7 +415,6 @@ server.on('message', (data, rinfo) => {
     } else if (ctlByte == ctlType.CTL_QUERY) {
       console.log(`#${procId}] > CTL_QUERY`);
       console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
-      // TODO: Response info as Json.
 
       let strReturn = JSON.stringify({
         serverstate: 'online',
@@ -323,7 +426,7 @@ server.on('message', (data, rinfo) => {
         clientcount: clientCount,
         clients: (function () {
           let clientsArr = [];
-          for(let key in clientsIpList) {
+          for (let key in clientsIpList) {
             let c = clientsIpList[key];
             let client = {
               name: c.name,
@@ -408,6 +511,17 @@ server.on('message', (data, rinfo) => {
       console.log(`Server full !!`);
     }
 
+    /*
+    setTimeout(function (client) {
+      let testFeedback = genSendMsgBytes('SYSTEM', 'Welcome to Thai RA2 Lovers.');
+      //testFeedback[0] = client.id;
+      console.log('bytes >> ');
+      console.log(testFeedback);
+      testFeedback = new Buffer(testFeedback);
+      server.send(testFeedback, 0, testFeedback.length, client.connection.port, client.connection.address);
+    }, 1000, client);
+    */
+
     return;
   }
 
@@ -437,17 +551,17 @@ server.on('message', (data, rinfo) => {
             console.log('Resolving name...');
 
             let clientName = '',
-                clientNameArr = [];
+              clientNameArr = [];
 
             // SubArray name from data.
             clientNameArr = function (obj) {
               let byteArr = [];
-              for(let i = 25; i < 42; i++) {
+              for (let i = 25; i < 42; i++) {
                 byteArr.push(obj[i]);
               }
 
               return byteArr;
-            }(data);
+            } (data);
 
             // Map char data.
             clientNameArr.map(function (value, index) {
@@ -520,7 +634,7 @@ var timeoutKicker = function () {
   }
 
   let nowDate = new Date();
-  for(let i in clientsIpList) {
+  for (let i in clientsIpList) {
     if (null == clientsIpList[i]) {
       continue;
     }
