@@ -62,45 +62,6 @@ server.on('listening', () => {
   rl.prompt();
 });
 
-// Initialize Express
-wapp.get('/', (req, res) => {
-  res.send('YuriNET Hello !');
-});
-
-wapp.get('/info', (req, res) => {
-  let strReturn = JSON.stringify({
-    serverstate: 'online',
-    servername: 'NODEJS',
-    serverport: Config.port,
-    launchedon: startedAt,
-    maxclients: Config.maxClients,
-    peekclients: peekClient,
-    clientcount: clientCount,
-    clients: (function () {
-      let clientsArr = [];
-      for (let key in clientsIpList) {
-        let c = clientsIpList[key];
-        let client = {
-          name: c.name,
-          game: c.game,
-          timestamp: c.timestamp
-        };
-
-        clientsArr.push(client);
-      }
-
-      return clientsArr;
-    })()
-  });
-  res.send(strReturn);
-});
-
-// Bind Web Application
-wapp.listen(4480, () => {
-  console.log('Web application listening on port 4480');
-});
-
-
 // Input
 rl.on('line', (line) => {
   line = line.trim();
@@ -375,6 +336,45 @@ for (var i = 0; i < Config.maxClients; i++) {
   clients[i] = null;
   //clients.push(null);
 }
+
+
+// Initialize Express
+wapp.get('/', (req, res) => {
+  res.send('YuriNET Hello !');
+});
+
+wapp.get('/info', (req, res) => {
+  let strReturn = JSON.stringify({
+    serverstate: 'online',
+    servername: 'NODEJS',
+    serverport: Config.port,
+    launchedon: startedAt,
+    maxclients: Config.maxClients,
+    peekclients: peekClient,
+    clientcount: clientCount,
+    clients: (function () {
+      let clientsArr = [];
+      for (let key in clientsIpList) {
+        let c = clientsIpList[key];
+        let client = {
+          name: c.name,
+          game: c.game,
+          timestamp: c.timestamp
+        };
+
+        clientsArr.push(client);
+      }
+
+      return clientsArr;
+    })()
+  });
+  res.send(strReturn);
+});
+
+// Bind Web Application
+wapp.listen(Config.port, () => {
+  console.log(`Web application listening on port ${Config.port}`);
+});
 
 
 // Received data.
