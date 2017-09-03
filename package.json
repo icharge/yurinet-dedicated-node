@@ -4,7 +4,7 @@
   "description": "YuriNET Dedicated Server with NodeJS",
   "main": "main.js",
   "scripts": {
-    "test": "test"
+    "start": "node main"
   },
   "keywords": [
     "YuriNET",
@@ -14,6 +14,7 @@
   "author": "iCharge",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.15.4"
+    "express": "^4.15.4",
+    "lazy.js": "^0.5.0"
   }
 }
