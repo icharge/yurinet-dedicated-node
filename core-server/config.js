@@ -1,11 +1,10 @@
-module.exports = class Config {
+exports.Config = class Config {
 
-  name = '';
-
-  port = 9000;
-
-  timeout = 10;
-
-  maxClients = 100;
+  constructor() {
+    this.name = '';
+    this.port = 9000;
+    this.timeout = 10;
+    this.maxClients = 100;
+  }
 
 }

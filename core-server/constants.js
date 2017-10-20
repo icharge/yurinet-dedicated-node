@@ -1,7 +1,7 @@
 
-exports = class CoreConstants {
+// exports = class CoreConstants {
   
-}
+// }
 
 /**
  * Type of command in first byte.

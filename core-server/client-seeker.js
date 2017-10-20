@@ -1,45 +1,18 @@
-import * as Client from './client';
+const { Client } = require('./client');
 
-module.exports = class ClientSeeker {
-
-  /**
-   * Current pointer to slot of Clients.
-   * 
-   * @type {number}
-   */
-  _index = 0;
+exports.ClientSeeker = class ClientSeeker {
 
   /**
-   * Client Map.
    * 
-   * @type {{[id: number]: Client}}
+   * @param {{[id: number]: Client}} clientList Client Map.
+   * @param {{[address: string]: Client}} clientListIp Client Map with IP address.
+   * @param {number} max Max clients.
    */
-  _clientsMap;
-
-  /**
-   * Client Map with IP address.
-   * 
-   * @type {{[address: string]: Client}}
-   */
-  _clientsMapIp;
-
-  /**
-   * Client count.
-   * 
-   * @type {number}
-   */
-  _clientCount = 0;
-
-  /**
-   * Max client.
-   * 
-   * @type {number}
-   */
-  _max = 0
-
   constructor(clientList, clientListIp, max) {
-    this._clientsMap = clientList;
-    this._clientsMapIp = clientListIp;
+    this._currentIndex = 0;
+    this._clientCount = 0;
+    this._clientsMap = clientList || {};
+    this._clientsMapIp = clientListIp || {};
     this._max = max;
   }
 
@@ -75,13 +48,13 @@ module.exports = class ClientSeeker {
 
   findFreeSlot() {
     let client = -1;
-    for (; c < this._max; this._index++) {
-      if (index > max) {
-        index = 0;
+    for (let c = 0; c < this._max; this._currentIndex++ , c++) {
+      if (this._currentIndex > this._max) {
+        this._currentIndex = 0;
       }
 
-      if (null == clients[index]) {
-        client = index;
+      if (this._clientsMap[this._currentIndex] == null) {
+        client = this._currentIndex;
         break;
       }
     }
@@ -104,7 +77,9 @@ module.exports = class ClientSeeker {
     if (null != client) {
       let addr = client.connection.address + ':' + client.connection.port;
       this._clientsMap[id] = null;
-      this._clientsMapIp[addr] = null;
+      // this._clientsMapIp[addr] = null;
+      delete this._clientsMapIp[addr];
+      this._clientCount--;
 
       console.log(`Removed client #${id} from ${addr}`);
     }
@@ -115,7 +90,8 @@ module.exports = class ClientSeeker {
     let client = this._clientsMapIp[addr];
     if (null != client) {
       this._clientsMap[client.id] = null;
-      this._clientsMapIp[addr] = null;
+      // this._clientsMapIp[addr] = null;
+      delete this._clientsMapIp[addr];
       this._clientCount--;
 
       console.log(`Removed client #${client.id} by IP:Port ${addr}`);

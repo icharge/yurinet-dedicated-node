@@ -1,15 +1,13 @@
-
-import { Socket, AddressInfo, createSocket } from 'dgram';
-
-// const dgram = require('dgram');
+const { EventEmitter } = require('events');
+const { Socket, AddressInfo, createSocket } = require('dgram');
+const { Config } = require('./config');
+const { ClientSeeker } = require('./client-seeker');
+const { Client } = require('./client');
+const { ClientData } = require('./client-data');
 
 const constants = require('./constants');
-const Config = require('./config');
-const ClientSeeker = require('./client-seeker');
-const Client = require('./client');
 
-
-exports.CoreServer = class CoreServer {
+exports.CoreServer = class CoreServer extends EventEmitter {
 
   get isServerStarted() {
     return !!this._server;
@@ -36,67 +34,19 @@ exports.CoreServer = class CoreServer {
   }
 
   /**
-   * Config instance
-   * 
-   * @type {Config}
-   */
-  _config;
-
-  /**
-   * @type {ClientSeeker}
-   */
-  _clientSeeker;
-
-  /**
-   * @type {{[key: string]: Client}}
-   */
-  _clients;
-
-  /**
-   * Max client online.
-   * 
-   * @type {number}
-   */
-  _peekClient;
-
-  /**
-   * UDP Server instance
-   * 
-   * @type {Socket}
-   */
-  _server;
-
-  /**
-   * Started server at.
-   * 
-   * @type {Date}
-   */
-  _startedAt;
-
-  /**
-   * Stopping state.
-   * 
-   * @type {boolean}
-   */
-  _isStopping;
-
-  /**
-   * @type {NodeJS.Timer}
-   */
-  _clientsCleanerTimer;
-
-  /**
    * 
    * @param {Config} config 
    */
   constructor(config) {
+    super();
+
     this._config = config;
-    this._clientSeeker = new ClientSeeker();
+
+    this._clientSeeker = new ClientSeeker({}, {}, this.config.maxClients);
+
+    this._peekClient = 0;
+
     this._isStopping = false;
-
-  }
-
-  startUdpServer() {
 
   }
 
@@ -104,9 +54,12 @@ exports.CoreServer = class CoreServer {
     // Prepare server
     this._server = createSocket('udp4');
 
-    this._clientsCleaner = setInterval(() => this._clientsCleaner());
-
+    // Add Events listener.
+    this._server.on('error', (err) => this._serverOnError(err));
+    this._server.on('listening', () => this._serverOnListening());
     this._server.on('message', (data, rinfo) => this._serverOnMessage(data, rinfo));
+
+    this._clientsCleanerTimer = setInterval(() => this._clientsCleaner(), 10 * 1000);
 
     this._server.bind(this._config.port);
 
@@ -124,6 +77,20 @@ exports.CoreServer = class CoreServer {
     if (isForce) {
       this._killSocket();
     }
+  }
+
+  /**
+   * On Server error.
+   * 
+   * @param {Error} err Error
+   */
+  _serverOnError(err) {
+    console.error('Error on UDP Server : ', err);
+    this.emit('error', err);
+  }
+
+  _serverOnListening() {
+    this.emit('listening', this._server);
   }
 
   /**
@@ -254,22 +221,22 @@ exports.CoreServer = class CoreServer {
         console.log(`Server full !!`);
       }
 
-      /*
-      setTimeout(function (client) {
-        let testFeedback = genSendMsgBytes('SYSTEM', 'Welcome to Thai RA2 Lovers.');
-        //testFeedback[0] = client.id;
-        console.log('bytes >> ');
-        console.log(testFeedback);
+
+      setTimeout(() => {
+        let testFeedback = this.genChatMessage('SYSTEM', 'Welcome to Thai RA2 Lovers.');
+        testFeedback[0] = client.id;
+        // console.log('bytes >> ');
+        // console.log(typeof testFeedback);
         testFeedback = new Buffer(testFeedback);
-        server.send(testFeedback, 0, testFeedback.length, client.connection.port, client.connection.address);
-      }, 1000, client);
-      */
+        this._server.send(testFeedback, 0, testFeedback.byteLength, client.connection.port, client.connection.address);
+      }, 2000);
+
 
       return;
     }
 
     // Broadcast package to all player.
-    if (cmdByte == cmdType.CMD_BROADCAST) {
+    if (cmdByte == constants.CMD_TYPE.CMD_BROADCAST) {
       // Set id to first of byte.
       data[0] = client.id;
 
@@ -367,6 +334,14 @@ exports.CoreServer = class CoreServer {
           clientToSend.connection.address);
       }
     }
+
+    setTimeout(() => {
+      // Experiment Get message.
+      const clientData = new ClientData(data);
+      if (clientData.clientMessage) {
+        console.log(` Lobby ${clientData.clientName} : ${clientData.clientMessage}`);
+      }
+    }, 1);
   }
 
   _clientsCleaner() {
@@ -395,6 +370,7 @@ exports.CoreServer = class CoreServer {
         console.log('All player leaved. Stop server on ' + new Date());
         // rl.close();
         this._killSocket();
+        this.emit('close');
       }
     }
   }
@@ -410,5 +386,42 @@ exports.CoreServer = class CoreServer {
     this._server.close();
     this._server = null;
   }
+
+  genChatMessage(name, message) {
+    let sendBytes = new ArrayBuffer(473);
+    // Clone payload header first.
+    //sendBytes = Array.clone(MSG_PAYLOAD);
+    let MSG_PAYLOAD = constants.MSG_PAYLOAD;
+    for (let i in MSG_PAYLOAD) {
+      sendBytes[i] = MSG_PAYLOAD[i];
+    }
+
+    // Push name to bytes array.
+    // Don't let name length greater than 16.
+    let nameLen = name.length < 17 ? name.length : 16;
+    for (let i = 0; i < nameLen; i++) {
+      sendBytes[i + 25] = name.charCodeAt(i);
+    }
+
+    // Push message to bytes array.
+    // Message length must less than 203.
+    let messageLen = (message.length < 204 ? message.length : 203);
+    let skip = false;
+
+    // console.log('messageLen : ' + messageLen);
+
+    for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
+      if (!skip) {
+        sendBytes[i] = message.charCodeAt(charIndex++);
+        console.log(i + ' ' + sendBytes[i])
+      } else {
+        sendBytes[i] = 0;
+      }
+      skip = !skip;
+    }
+
+    return sendBytes;
+  };
+
 
 }
