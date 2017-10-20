@@ -1,10 +1,11 @@
 'use strict';
 
+const { CoreServer } = require('./core-server/yurinet-core');
+const { Config } = require('./core-server/config');
+
 process.stdout.write("\x1Bc"); // Clear screen buffer.
 
 require('lazy.js');
-const dgram = require('dgram');
-const server = dgram.createSocket('udp4');
 const readline = require('readline');
 const util = require('util')
 const rl = readline.createInterface(process.stdin, process.stdout);
@@ -12,6 +13,21 @@ const rl = readline.createInterface(process.stdin, process.stdout);
 // Import WebServer
 const express = require('express');
 const wapp = express();
+
+// Configuration object.
+const config = new Config();
+config.port = 9000;
+config.timeout = 10;
+config.maxClients = 100;
+
+// Argument parsing...
+config.port = Number(process.argv[2]) || config.port;
+
+console.log(': Server options :');
+console.log(JSON.stringify(config, null, 2));
+console.log();
+
+const server = new CoreServer(config);
 
 // Override print log function.
 var fu = function (type, args) {
@@ -53,13 +69,18 @@ server.on('error', (err) => {
   server.close();
 });
 
-server.on('listening', () => {
-  var address = server.address();
+server.on('listening', (udpServer) => {
+  var address = udpServer.address();
   console.log(`Server started. And listening ${address.address}:${address.port}...`);
 
   // Show prompt.
   rl.setPrompt('> ');
   rl.prompt();
+});
+
+server.on('close', () => {
+  console.log('Server is shutted down.');
+  rl.close();
 });
 
 // Input
@@ -77,9 +98,9 @@ rl.on('line', (line) => {
       case 'online':
       case 'useronline':
         if (args[1] == 'detail') {
-          console.log(`All clients detail here : \n${JSON.stringify(clients, null, 2)}`);
+          console.log(`All clients detail here : \n${JSON.stringify(server._clients, null, 2)}`);
         }
-        console.log(`There are ${clientCount} online.`);
+        console.log(`There are ${server.clientCount} online.`);
         break;
 
       default:
@@ -100,10 +121,11 @@ rl.on('SIGINT', () => {
     + '\n [2] Stop server when all players are leaved.'
     + '\n > ', (ans) => {
       if (ans.trim() == '1') {
+        server.stopServer(true);
         rl.close();
       } else if (ans.trim() == '2') {
         console.log('Server stopped when all players are leaved.');
-        isWaitStop = true;
+        server.stopServer();
       } else {
         console.log('Cancelled');
       }
@@ -125,176 +147,7 @@ Array.clone = function (oldArr) {
   return newArr;
 };
 
-var genSendMsgBytes = function (name, message) {
-  let sendBytes = new ArrayBuffer(473);
-  // Clone payload header first.
-  //sendBytes = Array.clone(MSG_PAYLOAD);
-  for (let i in MSG_PAYLOAD) {
-    sendBytes[i] = MSG_PAYLOAD[i];
-  }
 
-  // Push name to bytes array.
-  // Don't let name length greater than 16.
-  let nameLen = name.length < 17 ? name.length : 16;
-  for (let i = 0; i < nameLen; i++) {
-    sendBytes[i + 25] = name.charCodeAt(i);
-  }
-
-  // Push message to bytes array.
-  // Message length must less than 203.
-  let messageLen = (message.length < 204 ? message.length : 203);
-  let skip = false;
-
-  console.log('messageLen : ' + messageLen);
-
-  for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
-    if (!skip) {
-      sendBytes[i] = message.charCodeAt(charIndex++);
-      console.log(i + ' ' + sendBytes[i])
-    } else {
-      sendBytes[i] = 0;
-    }
-    skip = !skip;
-  }
-
-  return sendBytes;
-};
-
-/**
- * Initialize global variables.
- */
-// Defined started date time.
-const startedAt = new Date();
-
-// Count only.
-var processCount = 0;
-
-// Max client number.
-var peekClient = 0;
-
-// Clients collection.
-var clients = {};
-
-// Clients collection by IP:Port as key.
-var clientsIpList = {};
-
-// Client count.
-var clientCount = 0;
-
-// Stop server when all player leaved.
-var isWaitStop = false;
-
-// Configuration object.
-var Config = {};
-Config.port = 9000;
-Config.timeout = 10;
-Config.maxClients = 100;
-
-// Argument parsing...
-Config.port = Number(process.argv[2]) || Config.port;
-
-console.log(': Server options :');
-console.log(JSON.stringify(Config, null, 2));
-console.log();
-
-/**
- * Class of client.
- */
-var Client = function () { /*.. */ };
-Client.prototype = function () {
-  let proto = {};
-  proto.id = -1;
-  proto.connection = {
-    address: '0.0.0.0',
-    port: 0
-  };
-  proto.name = '';
-  proto.timestamp = new Date();
-  proto.game = Game.NON;
-
-  return proto;
-} ();
-
-/**
- * Count clients on list.
- * @return {Number} Number of clients.
- */
-var getClientCount = function () {
-  let count = 0;
-  for (let i in clients) {
-    if (clients[i] != null)
-      count++;
-  }
-  return count;
-};
-
-/**
- * Client seeker class.
- */
-var ClientSeeker = (function (clientList, clientListIp, max) {
-  let index = 0;
-  let seeker = {};
-
-  seeker.findFreeSlot = function () {
-    let client = -1;
-    for (let c = 0; c < max; index++ , c++) {
-      if (index > max) {
-        index = 0;
-      }
-
-      if (null == clients[index]) {
-        client = index;
-        break;
-      }
-    }
-    return client;
-  };
-
-  seeker.addClient = function (client) {
-    if (null != client) {
-      let addr = client.connection.address + ':' + client.connection.port;
-      clientList[client.id] = client;
-      clientListIp[addr] = client;
-      clientCount++;
-
-      console.log(`Added client #${client.id} from ${addr}`);
-    }
-  };
-
-  seeker.removeClient = function (id) {
-    let client = clientList[id];
-    if (null != client) {
-      let addr = client.connection.address + ':' + client.connection.port;
-      clientList[id] = null;
-      delete clientListIp[addr];
-      clientCount--;
-
-      console.log(`Removed client #${id} from ${addr}`);
-    }
-  }
-
-  seeker.removeClientByIp = function (ip, port) {
-    let addr = ip + ':' + port;
-    let client = clientListIp[addr];
-    if (null != client) {
-      clientList[client.id] = null;
-      delete clientListIp[addr];
-      clientCount--;
-
-      console.log(`Removed client #${client.id} by IP:Port ${addr}`);
-    }
-
-    client = null;
-  }
-
-  return seeker;
-})(clients, clientsIpList, Config.maxClients);
-
-// Initiate client array list.
-for (var i = 0; i < Config.maxClients; i++) {
-  clients[i] = null;
-  //clients.push(null);
-}
 
 
 // Initialize Express
@@ -306,13 +159,15 @@ wapp.get('/info', (req, res) => {
   let strReturn = JSON.stringify({
     serverstate: 'online',
     servername: 'NODEJS',
-    serverport: Config.port,
-    launchedon: startedAt,
-    maxclients: Config.maxClients,
-    peekclients: peekClient,
-    clientcount: clientCount,
+    serverport: config.port,
+    launchedon: server.startedAt,
+    maxclients: config.maxClients,
+    peekclients: server.peekClient,
+    clientcount: server.clientCount,
     clients: (function () {
       let clientsArr = [];
+      let clientsIpList = server.clientsMapIp;
+      console.log('/info clientsIpList : ', clientsIpList);
       for (let key in clientsIpList) {
         let c = clientsIpList[key];
         let client = {
@@ -331,293 +186,9 @@ wapp.get('/info', (req, res) => {
 });
 
 // Bind Web Application
-wapp.listen(Config.port, () => {
-  console.log(`Web application listening on port ${Config.port}`);
+wapp.listen(config.port, () => {
+  console.log(`Web application listening on port ${config.port}`);
 });
 
 
-// Received data.
-// rinfo : Remote endpoint info.
-server.on('message', (data, rinfo) => {
-  let procId = ++processCount;
-
-  //console.log(`#${procId}] server got: data from ${rinfo.address}:${rinfo.port}`);
-  //console.log('Remote Endpoint Obj : ' + JSON.stringify(rinfo));
-
-  let dataLen = data.length;
-  //console.log(`#${procId}] Data length: ${dataLen}`);
-
-  // Initial command bytes.
-  let cmdByte = null,
-    ctlByte = null;
-
-  // Get command byte.
-  cmdByte = data[0];
-  ctlByte = data[1];
-
-  //console.log(`#${procId}] cmdByte: ${cmdByte} | ctlByte: ${ctlByte}`);
-
-  // Exit when null.
-  if (null == cmdByte || null == ctlByte) {
-    return;
-  }
-
-  if (cmdByte == cmdType.CMD_CONTROL) {
-    console.log(`#${procId}] CMD_CONTROL..`);
-
-    if (ctlByte == ctlType.CTL_PING) {
-      console.log(`#${procId}]  > CTL_PING`);
-
-      // Send back data.
-      server.send(data, 0, data.length, rinfo.port, rinfo.address);
-      return;
-    } else if (ctlByte == ctlType.CTL_QUERY) {
-      console.log(`#${procId}] > CTL_QUERY`);
-      console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
-
-      let strReturn = JSON.stringify({
-        serverstate: 'online',
-        servername: 'NODEJS',
-        serverport: Config.port,
-        launchedon: startedAt,
-        maxclients: Config.maxClients,
-        peekclients: peekClient,
-        clientcount: clientCount,
-        clients: (function () {
-          let clientsArr = [];
-          for (let key in clientsIpList) {
-            let c = clientsIpList[key];
-            let client = {
-              name: c.name,
-              game: c.game,
-              timestamp: c.timestamp
-            };
-
-            clientsArr.push(client);
-          }
-
-          return clientsArr;
-        })()
-      });
-
-      //console.log(strReturn);
-
-      let jsonReturn = new Buffer(strReturn);
-      server.send(jsonReturn, 0, jsonReturn.length, rinfo.port, rinfo.address);
-
-      // No need to store this client action.
-      return;
-    } else if (ctlByte == ctlType.CTL_RESET) {
-      console.log(`#${procId}] > CTL_RESET`);
-
-    } else if (ctlByte == ctlType.CTL_DISCONNECT) {
-      console.log(`#${procId}] > CTL_DISCONNECT`);
-
-      ClientSeeker.removeClientByIp(rinfo.address, rinfo.port)
-      return;
-    } else if (ctlByte == ctlType.CTL_PROXY) {
-      console.log(' > CTL_PROXY');
-
-      //return;
-    } else if (ctlByte == ctlType.CTL_PROXY_DISCONNECT) {
-      console.log(' > CTL_PROXY_DISCONNECT');
-
-      //return;
-    } else {
-      console.log(`#${procId}] > ?? Something else: ${ctlByte}`);
-      ////////// Ignore ///////////
-      return;
-    }
-
-  }
-
-  // Is full of clients?
-  if (clientCount >= Config.maxClients) {
-    console.log(`#${procId}] Server is full !.`);
-    console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
-    return;
-  }
-
-  // Find client Obj by Endpoint.
-  let client = clientsIpList[rinfo.address + ':' + rinfo.port];
-
-  //console.log('client : ' + client);
-
-  // New or Exist?
-  if (null != client) {
-    client.timestamp = new Date();
-    //console.log(`#${procId}] Found client.`);
-  } else {
-    let emptySlot = ClientSeeker.findFreeSlot();
-    console.log(`Got empty slot : ${emptySlot}`);
-
-    if (emptySlot > -1) {
-      // new client.
-      client = new Client();
-      client.connection = rinfo;
-      client.id = emptySlot;
-      client.timestamp = new Date();
-
-      // Add client to list.
-      //clients[emptySlot] = client;
-      //clientsIpList[rinfo.address + ':' + rinfo.port] = client;
-      //clientCount++;
-      ClientSeeker.addClient(client);
-
-      //console.log(`#${procId}] Inserted new client as #${emptySlot}`);
-      //console.log(`#${procId}] from: ${rinfo.address}:${rinfo.port}`);
-    } else {
-      console.log(`Server full !!`);
-    }
-
-    /*
-    setTimeout(function (client) {
-      let testFeedback = genSendMsgBytes('SYSTEM', 'Welcome to Thai RA2 Lovers.');
-      //testFeedback[0] = client.id;
-      console.log('bytes >> ');
-      console.log(testFeedback);
-      testFeedback = new Buffer(testFeedback);
-      server.send(testFeedback, 0, testFeedback.length, client.connection.port, client.connection.address);
-    }, 1000, client);
-    */
-
-    return;
-  }
-
-  if (cmdByte == cmdType.CMD_BROADCAST) {
-    // Set id to first byte.
-    data[0] = client.id;
-
-    for (let i in clientsIpList) {
-      if (null == clientsIpList[i])
-        continue;
-
-      if (clientsIpList[i].id != client.id) {
-        let clientConn = clientsIpList[i].connection;
-        //console.log(`#${procId}] Broadcast by ${client.id} to ${i}`);
-        server.send(data, 0, data.length, clientConn.port, clientConn.address);
-      }
-    }
-
-    // Set name & game to current client
-    if (client != null) {
-      // Make Async.
-      setTimeout(function (client, data) {
-
-        // Check if have no name.
-        if (client.name == "" || client.name == null) {
-          try {
-            console.log('Resolving name...');
-
-            let clientName = '',
-              clientNameArr = [];
-
-            // SubArray name from data.
-            clientNameArr = function (obj) {
-              let byteArr = [];
-              for (let i = 25; i < 42; i++) {
-                byteArr.push(obj[i]);
-              }
-
-              return byteArr;
-            } (data);
-
-            // Map char data.
-            clientNameArr.map(function (value, index) {
-              // Not need \0 terminated string.
-              if (value == 0) {
-                delete clientNameArr[index];
-                return;
-              }
-
-              // Change byte to Char.
-              clientNameArr[index] = String.fromCharCode(value);
-            });
-
-            // Join char to String.
-            clientName = clientNameArr.join('').trim();
-
-            client.name = clientName;
-
-            console.log('Resolved name is ' + clientName);
-          } catch (ex) {
-            console.error("Can't get name from bytes !");
-            console.error(ex);
-          }
-        }
-
-        if (client.game == Game.NON) {
-          let clientGame = Game.NON;
-
-          if (data[19] == 3) {
-            clientGame = Game.RA2;
-          } else if (data[19] == 4) {
-            clientGame = Game.YR;
-          }
-
-          client.game = clientGame;
-        }
-      }, 1, client, data);
-
-    }
-    // END of Getting name.---------------------------------------------------------
-
-  } else if (cmdByte != client.id) {
-    // Send to specified ID.
-    let idToSend = cmdByte;
-    data[0] = client.id;
-
-    //console.log(`#${procId}] Sending from ${client.id} to ${idToSend}.`);
-    let clientToSend = clients[idToSend];
-
-    //console.log(`#${procId}] clientToSend : ` + JSON.stringify(clientToSend));
-    if (!!clientToSend) {
-      //console.log(`#${procId}] Sending...`);
-      server.send(data, 0, data.length, clientToSend.connection.port,
-        clientToSend.connection.address);
-    }
-  }
-
-});
-
-//console.log('clients:', JSON.stringify(clients));
-
-/**
- * Timeout Kicker.
- */
-var timeoutKicker = function () {
-  processCount = 0;
-
-  if (clientCount > peekClient) {
-    peekClient = clientCount
-  }
-
-  let nowDate = new Date();
-  for (let i in clientsIpList) {
-    if (null == clientsIpList[i]) {
-      continue;
-    }
-
-    let diff = Math.round((nowDate - clientsIpList[i].timestamp) / 1000);
-    //console.log('Diff ' + diff);
-    if (diff > Config.timeout) {
-      let clientId = clientsIpList[i].id;
-      ClientSeeker.removeClient(clientId);
-      console.log('Kicked client #' + clientId);
-    }
-  }
-  clientCount = getClientCount();
-
-  if (isWaitStop) {
-    if (clientCount <= 0) {
-      console.log('All player leaved. Stop server on ' + new Date());
-      rl.close();
-    }
-  }
-};
-
-var timeoutKickerPromise = setInterval(timeoutKicker, 1000);
-console.log(`Started timeoutKicker.`);
-
-// Open server port.
-server.bind(Config.port);
+server.startServer();
