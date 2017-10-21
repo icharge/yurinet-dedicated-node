@@ -13,3 +13,17 @@ exports.tis620CharCodeToUtf8 = function tis620CharCodeToUtf8(input) {
   }
   return String.fromCharCode(input);
 }
+
+/**
+ * Convert UTF-8 to TIS-620 by adjust byte.
+ * Opposite function
+ * 
+ * @param {number} input Input byte or number.
+ * @returns {number} Converted byte or number.
+ */
+exports.utf8CharCodeToTis620 = function utf8CharCodeToTis620(input) {
+  if (input > 3584 && input < 3676) {
+    input = input - 161 + 3585;
+  }
+  return input;
+}
