@@ -4,6 +4,7 @@ const { Config } = require('./config');
 const { ClientSeeker } = require('./client-seeker');
 const { Client } = require('./client');
 const { ClientData } = require('./client-data');
+const { tis620CharCodeToUtf8, createChatPacket, createLobbyPacket, arrayBufferToBuffer } = require('./util');
 
 const constants = require('./constants');
 
@@ -48,6 +49,9 @@ exports.CoreServer = class CoreServer extends EventEmitter {
 
     this._isStopping = false;
 
+    // Packet ID
+    this._packetIdRa2 = 1;
+    this._packetIdYr = 1;
   }
 
   startServer() {
@@ -108,6 +112,9 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     // Assign header value from incoming data.
     let cmdByte = data[0];
     let ctlByte = data[1];
+    let packetId = data[9];
+
+    // console.log(' Received packet #' + packetId);
 
     // Invalid data will ignore.
     if (null == cmdByte || null == ctlByte) {
@@ -221,15 +228,27 @@ exports.CoreServer = class CoreServer extends EventEmitter {
         console.log(`Server full !!`);
       }
 
-
       setTimeout(() => {
-        let testFeedback = this.genChatMessage('SYSTEM', 'Welcome to Thai RA2 Lovers.');
-        testFeedback[0] = client.id;
-        // console.log('bytes >> ');
-        // console.log(typeof testFeedback);
-        testFeedback = new Buffer(testFeedback);
-        this._server.send(testFeedback, 0, testFeedback.byteLength, client.connection.port, client.connection.address);
-      }, 2000);
+
+        // Fake player
+        let fakePlayerPacket = createLobbyPacket(this._nextYrPacketId(), 'SYSTEM');
+        fakePlayerPacket = new Buffer(fakePlayerPacket);
+
+        console.log('first ', fakePlayerPacket[0]);
+        console.log(' Sending to ', client);
+        this._server.send(fakePlayerPacket, 0, fakePlayerPacket.byteLength, client.connection.port, client.connection.address);
+
+        setTimeout(() => {
+          // let testFeedback = this.genChatMessage('SYSTEM', 'Welcome to Thai RA2 Lovers.');
+          let testFeedback = createChatPacket(this._nextYrPacketId(), 'SYSTEM', 'Welcome to Thai RA2 Lovers.');
+          testFeedback[0] = client.id;
+          testFeedback = new Buffer(testFeedback);
+          // console.log('bytes >> ');
+          // console.log(typeof testFeedback);
+          this._server.send(testFeedback, 0, testFeedback.byteLength, client.connection.port, client.connection.address);
+        }, 2000);
+
+      }, 1000);
 
 
       return;
@@ -388,6 +407,19 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     this._server = null;
   }
 
+  _nextYrPacketId() {
+    if (this._packetIdYr > 255) {
+      this._packetIdYr = 0;
+    }
+    return this._packetIdYr++;
+  }
+
+  /**
+   * Generate Chat message packet.
+   * 
+   * @param {string} name Player name
+   * @param {string} message Message
+   */
   genChatMessage(name, message) {
     let sendBytes = new ArrayBuffer(473);
     // Clone payload header first.
@@ -401,7 +433,7 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     // Don't let name length greater than 16.
     let nameLen = name.length < 17 ? name.length : 16;
     for (let i = 0; i < nameLen; i++) {
-      sendBytes[i + 25] = name.charCodeAt(i);
+      sendBytes[i + 25] = tis620CharCodeToUtf8(name.charCodeAt(i));
     }
 
     // Push message to bytes array.
