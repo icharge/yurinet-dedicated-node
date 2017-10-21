@@ -58,7 +58,7 @@ function onListening() {
   console.log('Listening on ' + bind);
 }
 
-const socketController = new SocketController(httpServer);
+const socketCtrl = new SocketController(httpServer);
 
 // Configuration object.
 const config = new Config();
@@ -126,6 +126,12 @@ server.on('listening', (udpServer) => {
 
 server.on('lobby.chat', (name, message) => {
   console.log(` [Lobby] > ${name} : ${message}`);
+
+  socketCtrl.emitLobbyMessage({
+    name,
+    message,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 server.on('close', () => {

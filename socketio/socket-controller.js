@@ -101,11 +101,11 @@ class SocketController {
 
   /**
    * Emit Lobby message to who is listening.
-   * 
-   * @param {string} message Chat message
    */
-  emitLobbyMessage(message) {
-    this.io.to('lobby').emit('chat', message);
+  emitLobbyMessage(obj) {
+    this.io
+      // .to('lobby')
+      .emit('lobby.chat', obj);
   }
 
 }
