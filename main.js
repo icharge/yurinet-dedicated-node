@@ -78,6 +78,10 @@ server.on('listening', (udpServer) => {
   rl.prompt();
 });
 
+server.on('lobby.chat', (name, message) => {
+  console.log(` [Lobby] > ${name} : ${message}`);
+});
+
 server.on('close', () => {
   console.log('Server is shutted down.');
   rl.close();

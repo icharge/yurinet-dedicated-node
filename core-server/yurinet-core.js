@@ -336,10 +336,11 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     }
 
     setTimeout(() => {
-      // Experiment Get message.
-      const clientData = new ClientData(data);
-      if (clientData.clientMessage) {
-        console.log(` Lobby ${clientData.clientName} : ${clientData.clientMessage}`);
+      // Experiment Get player message in Lobby.
+      const clientData = ClientData.createClientMessage(data);
+      if (clientData) {
+        // console.log(` - [Lobby] ${clientData.clientName} : ${clientData.clientMessage}`);
+        this.emit('lobby.chat', clientData.clientName, clientData.clientMessage);
       }
     }, 1);
   }
