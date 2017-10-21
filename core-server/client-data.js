@@ -1,4 +1,5 @@
 const { GAME } = require('./constants');
+const { tis620CharCodeToUtf8 } = require('./util');
 
 exports.ClientData = class ClientData {
 
@@ -23,14 +24,37 @@ exports.ClientData = class ClientData {
       this.gameVersion = GAME.YR;
     }
 
+    // Debugging logs
+    console.log('Client Data :');
+    console.log('  cmd :', this.cmdCommand);
+    console.log('  mode :', this.mode);
+
     // Extract name & message when Mode = 12.
-    // if (this.mode == 12) {
-    this.clientName = this._extractClientName(rawData);
-    this.clientMessage = this._extractMessage(rawData);
-    // }
+    if (this.mode == 12) {
+      this.clientName = this._extractClientName(rawData);
+      this.clientMessage = this._extractMessage(rawData);
+      console.log('  Name :', this.clientName);
+      console.log('  Message :', this.clientMessage);
+    }
 
-    console.log('Client Data :', rawData.toString('UTF-8'));
+    // console.log('  bytes :', rawData.toString('UTF-8'));
 
+  }
+
+  /**
+   * Create Client data with message text. (Only when message available)
+   * 
+   * @param {Buffer} rawData RAW Bytes array.
+   * @returns {ClientData} Client data model.
+   */
+  static createClientMessage(rawData) {
+    let mode = rawData[21];
+
+    if (mode == 12) { // Is it a Lobby chat thing ?
+      return new ClientData(rawData);
+    } else {
+      return null;
+    }
   }
 
   /**
@@ -47,7 +71,7 @@ exports.ClientData = class ClientData {
       if (byte == 0) {
         break;
       }
-      strArray.push(String.fromCharCode(byte));
+      strArray.push(tis620CharCodeToUtf8(byte));
     }
 
     let clientName = strArray.join('').trim();
@@ -60,21 +84,30 @@ exports.ClientData = class ClientData {
    * @param {Buffer} data Raw Data.
    */
   _extractMessage(data) {
-    let strArray = [];
     const messageStartIndex = 69;
     const messageEndIndex = messageStartIndex + 203;
+
+    let strArray = [];
+    let foundTerminateChar = false;
     for (let i = messageStartIndex; i < messageEndIndex; i++) {
       const byte = data[i];
 
       // stop when \0.
       if (byte == 0) {
-        break;
+        if (foundTerminateChar) {
+          break;
+        }
+        foundTerminateChar = true;
+        continue;
       }
-      strArray.push(String.fromCharCode(byte));
+
+      foundTerminateChar = false;
+      strArray.push(tis620CharCodeToUtf8(byte));
     }
 
 
-    let clientName = strArray.join('').trim();
+    let message = strArray.join('').trim();
+    return message;
   }
 
 }
