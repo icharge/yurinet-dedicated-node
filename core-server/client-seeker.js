@@ -73,7 +73,7 @@ exports.ClientSeeker = class ClientSeeker {
   }
 
   removeClient(id) {
-    let client = clientList[id];
+    let client = this._clientsMap[id];
     if (null != client) {
       let addr = client.connection.address + ':' + client.connection.port;
       this._clientsMap[id] = null;
