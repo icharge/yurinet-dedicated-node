@@ -35,9 +35,9 @@ exports.ClientData = class ClientData {
       this.clientMessage = this._extractMessage(rawData);
       console.log('  Name :', this.clientName);
       console.log('  Message :', this.clientMessage);
+      console.log('  bytes :', [...rawData]);
     }
 
-    // console.log('  bytes :', rawData.toString('UTF-8'));
 
   }
 
