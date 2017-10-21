@@ -2,6 +2,7 @@
 
 const { CoreServer } = require('./core-server/yurinet-core');
 const { Config } = require('./core-server/config');
+const SocketController = require('./socketio/socket-controller');
 
 process.stdout.write("\x1Bc"); // Clear screen buffer.
 
@@ -10,9 +11,54 @@ const readline = require('readline');
 const util = require('util')
 const rl = readline.createInterface(process.stdin, process.stdout);
 
+process.on('uncaughtException', function (err) {
+  console.error(err.stack);
+  console.log("Node NOT Exiting...");
+});
+
 // Import WebServer
 const express = require('express');
 const wapp = express();
+const httpServer = require('http').createServer(wapp);
+
+httpServer.on('error', onError);
+httpServer.on('listening', onListening);
+
+function onError(error) {
+  console.log('Http Server On Error :', error);
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      console.error('Error -> ', error);
+      throw error;
+  }
+}
+
+function onListening() {
+  var addr = httpServer.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  console.log('Listening on ' + bind);
+}
+
+const socketController = new SocketController(httpServer);
 
 // Configuration object.
 const config = new Config();
@@ -190,9 +236,8 @@ wapp.get('/info', (req, res) => {
 });
 
 // Bind Web Application
-wapp.listen(config.port, () => {
+httpServer.listen(config.port, () => {
   console.log(`Web application listening on port ${config.port}`);
 });
-
 
 server.startServer();
