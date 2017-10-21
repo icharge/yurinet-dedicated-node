@@ -27,3 +27,79 @@ exports.utf8CharCodeToTis620 = function utf8CharCodeToTis620(input) {
   }
   return input;
 }
+
+exports.arrayBufferToBuffer = function arrayBufferToBuffer(ab) {
+  // short hand
+  var buf = new Buffer(new Uint8Array(ab));
+
+  /*  var buf = new Buffer(ab.byteLength);
+   var view = new Uint8Array(ab);
+   for (var i = 0; i < buf.length; ++i) {
+     buf[i] = view[i];
+   } */
+  return buf;
+}
+
+exports.createChatPacket = function createChatPacket(packetId, name, message) {
+  const TEMPLATE = require('./constants').MSG_PAYLOAD_2;
+
+  let sendBytes = new Uint8Array(473);
+
+  for (let i in TEMPLATE) {
+    sendBytes[i] = TEMPLATE[i];
+  }
+
+  // Push name to bytes array.
+  // Don't let name length greater than 16.
+  let nameLen = name.length < 17 ? name.length : 16;
+  for (let i = 0; i < nameLen; i++) {
+    sendBytes[i + 25] = exports.tis620CharCodeToUtf8(name.charCodeAt(i));
+  }
+
+  // Push message to bytes array.
+  // Message length must less than 203.
+  let messageLen = (message.length < 204 ? message.length : 203);
+  let skip = false;
+
+  // console.log('messageLen : ' + messageLen);
+
+  for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
+    if (!skip) {
+      sendBytes[i] = message.charCodeAt(charIndex++);
+      console.log(i + ' ' + sendBytes[i])
+    } else {
+      sendBytes[i] = 0;
+    }
+    skip = !skip;
+  }
+
+  // Set packet ID
+  sendBytes[9] = packetId
+
+  return sendBytes;
+}
+
+exports.createLobbyPacket = function createLobbyPacket(packetId, name) {
+  const TEMPLATE = require('./constants').MSG_PAYLOAD_2;
+
+  let sendBytes = new Uint8Array(473);
+
+  for (let i in TEMPLATE) {
+    sendBytes[i] = TEMPLATE[i];
+  }
+
+  // Push name to bytes array.
+  // Don't let name length greater than 16.
+  let nameLen = name.length < 17 ? name.length : 16;
+  for (let i = 0; i < nameLen; i++) {
+    sendBytes[i + 25] = exports.tis620CharCodeToUtf8(name.charCodeAt(i));
+  }
+
+  // Set packet ID
+  sendBytes[0] = 255;
+  sendBytes[9] = packetId
+
+  sendBytes[21] = 0;
+
+  return sendBytes;
+}
