@@ -228,6 +228,7 @@ exports.CoreServer = class CoreServer extends EventEmitter {
         console.log(`Server full !!`);
       }
 
+      // Experimemt
       setTimeout(() => {
 
         // Fake player
@@ -355,7 +356,7 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     }
 
     setTimeout(() => {
-      // Experiment Get player message in Lobby.
+      // Get player message in Lobby.
       const clientData = ClientData.createClientMessage(data);
       if (clientData) {
         // console.log(` - [Lobby] ${clientData.clientName} : ${clientData.clientMessage}`);

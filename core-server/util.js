@@ -65,7 +65,7 @@ exports.createChatPacket = function createChatPacket(packetId, name, message) {
 
   for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
     if (!skip) {
-      sendBytes[i] = message.charCodeAt(charIndex++);
+      sendBytes[i] = exports.tis620CharCodeToUtf8(message.charCodeAt(charIndex++));
       console.log(i + ' ' + sendBytes[i])
     } else {
       sendBytes[i] = 0;
@@ -74,7 +74,7 @@ exports.createChatPacket = function createChatPacket(packetId, name, message) {
   }
 
   // Set packet ID
-  sendBytes[9] = packetId
+  sendBytes[9] = packetId;
 
   return sendBytes;
 }
