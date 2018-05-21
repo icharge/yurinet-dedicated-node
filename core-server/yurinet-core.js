@@ -447,7 +447,7 @@ exports.CoreServer = class CoreServer extends EventEmitter {
     for (let i = 69, charIndex = 0; charIndex < messageLen; i++) {
       if (!skip) {
         sendBytes[i] = message.charCodeAt(charIndex++);
-        console.log(i + ' ' + sendBytes[i])
+        // console.log(i + ' ' + sendBytes[i])
       } else {
         sendBytes[i] = 0;
       }
