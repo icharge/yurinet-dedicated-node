@@ -7,9 +7,9 @@ const SocketController = require('./socketio/socket-controller');
 process.stdout.write("\x1Bc"); // Clear screen buffer.
 
 require('lazy.js');
-const readline = require('readline');
 const util = require('util')
-const rl = readline.createInterface(process.stdin, process.stdout);
+// const readline = require('readline');
+// const rl = readline.createInterface(process.stdin, process.stdout);
 
 process.on('uncaughtException', function (err) {
   console.error(err.stack);
@@ -76,7 +76,7 @@ console.log();
 const server = new CoreServer(config);
 
 // Override print log function.
-var fu = function (type, args) {
+/* var fu = function (type, args) {
   let text = util.format.apply(console, args);
   try {
     let t = Math.ceil((rl.line.length + 3) / process.stdout.columns);
@@ -102,7 +102,7 @@ console.info = function () {
 };
 console.error = function () {
   fu("error", arguments);
-};
+}; */
 
 console.log('YuriNET Dedicated Server v1 - NODEJS');
 console.log('====================================');
@@ -120,8 +120,8 @@ server.on('listening', (udpServer) => {
   console.log(`Server started. And listening ${address.address}:${address.port}...`);
 
   // Show prompt.
-  rl.setPrompt('> ');
-  rl.prompt();
+  /* rl.setPrompt('> ');
+  rl.prompt(); */
 });
 
 server.on('lobby.chat', (name, message) => {
@@ -136,11 +136,11 @@ server.on('lobby.chat', (name, message) => {
 
 server.on('close', () => {
   console.log('Server is shutted down.');
-  rl.close();
+  // rl.close();
 });
 
 // Input
-rl.on('line', (line) => {
+/* rl.on('line', (line) => {
   line = line.trim();
   if (line != '') {
     let args = line.split(' ');
@@ -188,7 +188,7 @@ rl.on('SIGINT', () => {
 
       rl.prompt();
     });
-});
+}); */
 
 /**
  * Clone Array.
